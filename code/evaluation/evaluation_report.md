@@ -12,9 +12,9 @@ Three configurations were compared on the labeled sample set:
 
 | Strategy | Macro scalar acc | claim_status acc | severity acc | risk_flags F1 | supporting_image_ids F1 |
 |---|---|---|---|---|---|
-| A_final | 0.733 | 0.750 | 0.550 | 0.802 | 0.883 |
+| A_final | 0.733 | 0.750 | 0.550 | 0.858 | 0.883 |
 | B_ablation | 0.742 | 0.800 | 0.600 | 0.400 | 0.900 |
-| C_verify | 0.675 | 0.600 | 0.350 | 0.572 | 0.883 |
+| C_verify | 0.675 | 0.600 | 0.350 | 0.625 | 0.883 |
 
 _Note on variance: the model is a non-deterministic MoE, so even at temperature=0 the 20-sample macro accuracy varies ~±0.02 run-to-run. Differences below ~0.03 are within noise; only larger effects (the rule layer's risk-flag gain, and the rejected CoT / verification / 235B experiments) are treated as real signal._
 
@@ -38,7 +38,10 @@ The 235B model **over-contradicts** (it flipped 4 genuinely-supported claims to 
 Two prompt enhancements were measured on the sample (held in `prompts.py`/`schema.py`):
 
 - **Severity anchors (kept)** — explicit per-object definitions of none/low/medium/high. Macro stayed within noise but `risk_flags` F1 improved robustly (~0.66 without anchors -> ~0.80 with anchors + rule layer), so the anchors are part of the final prompt.
+- **Deterministic quality-flag gating (kept)** — the model over-emits `low_light_or_glare` / `blurry_image` on clean images. A CV check (Laplacian-variance sharpness, brightness, glare/dark pixel fractions, computed in `data.py`) drops those flags unless an image actually corroborates them. Pure post-processing: `risk_flags` F1 0.80 -> 0.86 (precision up, recall unchanged), no effect on other fields.
 - **Chain-of-thought `image_observations` field (rejected)** — forcing a perception-first observation list before the verdict *lowered* accuracy (macro 0.758 -> 0.717; severity and issue_type both dropped). On this lenient-gold dataset the extra analysis makes the model drift toward over-calling mismatches — the same pattern as the 235B model and the verification pass. Removed.
+- **Few-shot exemplars (rejected)** — text-only solved examples (held-out evaluation on the 14 non-exemplar sample claims). No gain on the target fields (claim_status, severity, issue_type all unchanged) and a catastrophic `risk_flags` F1 collapse (0.765 -> 0.227): the exemplars anchor the model to over-produce risk flags on clean images. Kept behind the `few_shot` flag (OFF). See `fewshot.py`.
+- **Leniency nudge (rejected)** — instructing the model to default to `supported` unless clear contrary evidence left the `claim_status` confusion matrix byte-for-byte identical (and slightly hurt severity/risk_flags). Conclusion: `claim_status` errors are **perception-bound, not calibration-bound** — the model misses contradictions because it cannot visually distinguish minor/mismatched damage, so neither skeptical nor lenient threshold nudges move it. Kept behind the `leniency` flag (OFF).
 
 ## 2. Detailed metrics
 
@@ -54,9 +57,9 @@ Two prompt enhancements were measured on the sample (held in `prompts.py`/`schem
 | object_part | accuracy | 0.850 |
 | claim_status | accuracy | 0.750 |
 | severity | accuracy | 0.550 |
-| risk_flags | precision | 0.846 |
-| risk_flags | recall | 0.796 |
-| risk_flags | F1 | 0.802 |
+| risk_flags | precision | 0.904 |
+| risk_flags | recall | 0.846 |
+| risk_flags | F1 | 0.858 |
 | supporting_image_ids | precision | 0.900 |
 | supporting_image_ids | recall | 0.875 |
 | supporting_image_ids | F1 | 0.883 |
@@ -92,9 +95,9 @@ Two prompt enhancements were measured on the sample (held in `prompts.py`/`schem
 | object_part | accuracy | 0.850 |
 | claim_status | accuracy | 0.600 |
 | severity | accuracy | 0.350 |
-| risk_flags | precision | 0.572 |
-| risk_flags | recall | 0.629 |
-| risk_flags | F1 | 0.572 |
+| risk_flags | precision | 0.625 |
+| risk_flags | recall | 0.679 |
+| risk_flags | F1 | 0.625 |
 | supporting_image_ids | precision | 0.900 |
 | supporting_image_ids | recall | 0.875 |
 | supporting_image_ids | F1 | 0.883 |

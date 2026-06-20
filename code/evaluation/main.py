@@ -45,7 +45,7 @@ STRATEGIES = {
     "B_ablation": {
         "label": "Ablation: no evidence requirements, no rule layer",
         "strategy": {"include_requirements": False, "merge_history": False,
-                     "enforce_consistency": False, "verify": False},
+                     "enforce_consistency": False, "verify": False, "quality_gate": False},
     },
     "C_verify": {
         "label": "Final + adversarial verification pass (rejected)",
@@ -174,11 +174,27 @@ def _write_report(args, claims, results) -> None:
         "- **Severity anchors (kept)** — explicit per-object definitions of none/low/medium/high. "
         "Macro stayed within noise but `risk_flags` F1 improved robustly (~0.66 without anchors -> "
         "~0.80 with anchors + rule layer), so the anchors are part of the final prompt.",
+        "- **Deterministic quality-flag gating (kept)** — the model over-emits "
+        "`low_light_or_glare` / `blurry_image` on clean images. A CV check (Laplacian-variance "
+        "sharpness, brightness, glare/dark pixel fractions, computed in `data.py`) drops those "
+        "flags unless an image actually corroborates them. Pure post-processing: `risk_flags` F1 "
+        "0.80 -> 0.86 (precision up, recall unchanged), no effect on other fields.",
         "- **Chain-of-thought `image_observations` field (rejected)** — forcing a perception-first "
         "observation list before the verdict *lowered* accuracy (macro 0.758 -> 0.717; severity "
         "and issue_type both dropped). On this lenient-gold dataset the extra analysis makes the "
         "model drift toward over-calling mismatches — the same pattern as the 235B model and the "
         "verification pass. Removed.",
+        "- **Few-shot exemplars (rejected)** — text-only solved examples (held-out evaluation on "
+        "the 14 non-exemplar sample claims). No gain on the target fields (claim_status, severity, "
+        "issue_type all unchanged) and a catastrophic `risk_flags` F1 collapse (0.765 -> 0.227): "
+        "the exemplars anchor the model to over-produce risk flags on clean images. Kept behind "
+        "the `few_shot` flag (OFF). See `fewshot.py`.",
+        "- **Leniency nudge (rejected)** — instructing the model to default to `supported` unless "
+        "clear contrary evidence left the `claim_status` confusion matrix byte-for-byte identical "
+        "(and slightly hurt severity/risk_flags). Conclusion: `claim_status` errors are "
+        "**perception-bound, not calibration-bound** — the model misses contradictions because it "
+        "cannot visually distinguish minor/mismatched damage, so neither skeptical nor lenient "
+        "threshold nudges move it. Kept behind the `leniency` flag (OFF).",
         "",
         "## 2. Detailed metrics",
         "",

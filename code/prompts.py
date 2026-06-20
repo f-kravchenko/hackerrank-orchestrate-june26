@@ -130,15 +130,32 @@ def build_user_prompt(claim, requirements: list[dict]) -> str:
     return "\n".join(parts)
 
 
-def build_messages(claim, requirements: list[dict]) -> list[dict]:
-    """OpenAI-style chat messages with the text prompt + image_url content blocks."""
+LENIENCY_NUDGE = """CALIBRATION: Most genuine claims are supported. If the claimed damage is \
+plausibly visible on the claimed part, choose `supported` even if the visible severity differs \
+somewhat from the customer's wording, and do not withhold support just because an image is \
+imperfect. Reserve `contradicted` for clear contrary visual evidence (a different object, the \
+claimed part clearly visible with no damage, or a plainly different issue), and \
+`not_enough_information` for when the claimed part genuinely cannot be assessed."""
+
+
+def build_messages(claim, requirements: list[dict], *, few_shot: bool = False,
+                   leniency: bool = False) -> list[dict]:
+    """OpenAI-style chat messages with the text prompt + image_url content blocks.
+
+    When ``few_shot`` is set, text-only solved exemplars are inserted between the system
+    prompt and the query (excluding this claim's own user_id to keep eval honest).
+    """
     content: list[dict] = [{"type": "text", "text": build_user_prompt(claim, requirements)}]
     for img in claim.images:
         if not img.exists:
             continue
         content.append({"type": "text", "text": f"Image ID: {img.image_id}"})
         content.append({"type": "image_url", "image_url": {"url": img.data_uri}})
-    return [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": content},
-    ]
+
+    system_prompt = SYSTEM_PROMPT + ("\n\n" + LENIENCY_NUDGE if leniency else "")
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+    if few_shot:
+        from fewshot import few_shot_messages
+        messages.extend(few_shot_messages(exclude_user_id=claim.user_id))
+    messages.append({"role": "user", "content": content})
+    return messages

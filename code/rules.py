@@ -28,12 +28,37 @@ def _order_flags(flags: set[str]) -> str:
     return ";".join(ordered) if ordered else "none"
 
 
+def _quality_gate(flags: set[str], images) -> set[str]:
+    """Drop model-emitted quality flags that the deterministic CV metrics do not corroborate.
+
+    The model over-emits `low_light_or_glare` (and sometimes `blurry_image`) on clean images.
+    Only keep them when at least one submitted image actually looks dark/glary/low-detail.
+    This raises precision and never adds a flag.
+    """
+    metr = [im for im in images if im.exists and im.quality_ok]
+    if not metr:
+        return flags  # no metrics -> don't touch anything
+    min_sharp = min(im.sharpness for im in metr)
+    min_bright = min(im.brightness for im in metr)
+    max_glare = max(im.glare for im in metr)
+    max_dark = max(im.dark for im in metr)
+
+    out = set(flags)
+    if "low_light_or_glare" in out and not (min_bright < 60 or max_glare > 0.20 or max_dark > 0.40):
+        out.discard("low_light_or_glare")
+    if "blurry_image" in out and not (min_sharp < 130):
+        out.discard("blurry_image")
+    return out
+
+
 def apply_rules(pred: dict, claim, history: dict | None,
-                *, merge_history: bool = True, enforce_consistency: bool = True) -> dict:
+                *, merge_history: bool = True, enforce_consistency: bool = True,
+                quality_gate: bool = True) -> dict:
     """Return a normalized output dict (model fields + consistency + history flags).
 
     Enum clamping and supporting-id validation always run (they keep output in-spec).
-    ``merge_history`` and ``enforce_consistency`` can be disabled for ablation studies.
+    ``merge_history``, ``enforce_consistency``, and ``quality_gate`` can be disabled for
+    ablation studies.
     """
     obj = claim.claim_object
     valid_ids = {img.image_id for img in claim.images}
@@ -52,6 +77,10 @@ def apply_rules(pred: dict, claim, history: dict | None,
     for f in pred.get("risk_flags", []) or []:
         if f in RISK_FLAGS and f != "none":
             flags.add(f)
+
+    # Deterministic quality gate on the model's visual flags (before history merge).
+    if quality_gate:
+        flags = _quality_gate(flags, claim.images)
 
     if merge_history:
         hist_flags = set((history or {}).get("history_flags", "").split(";"))

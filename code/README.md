@@ -17,6 +17,9 @@ The model returns structured JSON (via `response_format` json_schema). A **deter
 rule layer** then:
 - merges **history-derived risk flags** from `user_history.csv` (`user_history_risk` implies
   `manual_review_required`) — these are not visible in images, so they are not trusted to the model,
+- **gates the model's quality risk flags** (`blurry_image`, `low_light_or_glare`) against
+  deterministic CV metrics (Laplacian-variance sharpness, brightness, glare/dark fractions),
+  dropping them when no image corroborates — raises `risk_flags` F1 ~0.80 → ~0.86 (precision),
 - clamps every categorical field to its allowed enum (`schema.py`),
 - enforces the consistency the labels exhibit (`not_enough_information` ⇒ no supporting images,
   unknown issue/severity; no visible issue ⇒ severity `none`),

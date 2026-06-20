@@ -8,6 +8,7 @@ A ``strategy`` dict controls ablations used by the evaluation harness:
     merge_history        : merge history-derived risk flags in the rule layer (default True)
     enforce_consistency  : apply consistency rules in the rule layer (default True)
     verify               : run the adversarial second-opinion pass on supported claims (default False)
+    few_shot             : prepend text-only solved exemplars to the prompt (default False)
 """
 
 from __future__ import annotations
@@ -26,13 +27,17 @@ DEFAULT_STRATEGY = {
     "merge_history": True,
     "enforce_consistency": True,
     "verify": False,
+    "few_shot": False,
+    "leniency": False,
+    "quality_gate": True,
 }
 
 
 def process_claim(claim, client: VLMClient, history_by_user: dict, strategy: dict | None = None) -> dict:
     strategy = {**DEFAULT_STRATEGY, **(strategy or {})}
     requirements = requirements_for(claim.claim_object) if strategy["include_requirements"] else []
-    messages = build_messages(claim, requirements)
+    messages = build_messages(claim, requirements, few_shot=strategy["few_shot"],
+                              leniency=strategy["leniency"])
     schema = model_json_schema(claim.claim_object)
     pred = client.complete(messages, schema)
     if strategy["verify"]:
@@ -42,6 +47,7 @@ def process_claim(claim, client: VLMClient, history_by_user: dict, strategy: dic
         pred, claim, history,
         merge_history=strategy["merge_history"],
         enforce_consistency=strategy["enforce_consistency"],
+        quality_gate=strategy["quality_gate"],
     )
 
 

@@ -55,6 +55,30 @@ class Image:
     abs_path: str
     exists: bool
     data_uri: str = ""     # "data:image/jpeg;base64,...." (empty if missing)
+    # Deterministic CV quality metrics (computed on the original image), used to gate the
+    # model's quality risk flags. quality_ok=False means metrics could not be computed.
+    quality_ok: bool = False
+    sharpness: float = 0.0   # variance of Laplacian (low => blurry / low-detail)
+    brightness: float = 0.0  # mean luminance 0..255
+    glare: float = 0.0       # fraction of near-white pixels (>=240)
+    dark: float = 0.0        # fraction of near-black pixels (<30)
+
+
+def compute_quality(abs_path: str) -> dict:
+    """Deterministic image-quality metrics via Pillow (no extra deps)."""
+    try:
+        from PIL import Image as PILImage, ImageFilter, ImageStat
+        with PILImage.open(abs_path) as im:
+            g = im.convert("L")
+            lap = g.filter(ImageFilter.Kernel((3, 3), [0, 1, 0, 1, -4, 1, 0, 1, 0], scale=1))
+            sharp = ImageStat.Stat(lap).var[0]
+            bright = ImageStat.Stat(g).mean[0]
+            hist = g.histogram()
+            total = sum(hist) or 1
+            return {"quality_ok": True, "sharpness": sharp, "brightness": bright,
+                    "glare": sum(hist[240:]) / total, "dark": sum(hist[:30]) / total}
+    except Exception:  # noqa: BLE001
+        return {"quality_ok": False, "sharpness": 0.0, "brightness": 0.0, "glare": 0.0, "dark": 0.0}
 
 
 @dataclass
@@ -89,7 +113,11 @@ def load_image(rel_path: str) -> Image:
                 raw = fh.read()
         b64 = base64.b64encode(raw).decode("ascii")
         data_uri = f"data:{mime};base64,{b64}"
-    return Image(image_id=image_id, rel_path=rel_path, abs_path=abs_path, exists=exists, data_uri=data_uri)
+    img = Image(image_id=image_id, rel_path=rel_path, abs_path=abs_path, exists=exists, data_uri=data_uri)
+    if exists:
+        for k, v in compute_quality(abs_path).items():
+            setattr(img, k, v)
+    return img
 
 
 def load_claims(csv_path: str, with_images: bool = True) -> list[Claim]:
