@@ -1,0 +1,29 @@
+# Logs (chat transcript log — never commit)
+agent_logs/
+*.log
+
+# Secrets
+.env
+code/.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Caches / generated
+code/cache/
+.pytest_cache/
+.DS_Store
+
+# Editor
+.vscode/
+
+# promptfoo generated artifacts (keep config + .py, drop outputs)
+code/promptfoo/tests.json
+code/promptfoo/results.json
+code/promptfoo/output.json
+.promptfoo/
