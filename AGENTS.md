@@ -42,8 +42,7 @@ The log file lives outside this repository, in the user's home directory, so it 
 
 | Platform | Path |
 |---|---|
-| macOS / Linux | `$HOME/hackerrank_orchestrate/log.txt` |
-| Windows | `%USERPROFILE%\hackerrank_orchestrate\log.txt` |
+| macOS / Linux | `./agent_logs/log.txt` |
 
 Rules:
 
@@ -192,7 +191,7 @@ without updating this file.
     ├── claims.csv                    # Inputs only; run your system on these rows
     ├── user_history.csv              # Historical claim counts and risk context
     ├── evidence_requirements.csv     # Minimum image evidence requirements
-    └── images/
+    └── images/ 
         ├── sample/                   # Images referenced by sample_claims.csv
         └── test/                     # Images referenced by claims.csv
 ```
